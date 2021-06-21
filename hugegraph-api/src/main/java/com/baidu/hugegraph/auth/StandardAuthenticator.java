@@ -21,7 +21,6 @@ package com.baidu.hugegraph.auth;
 
 import java.io.Console;
 import java.net.InetAddress;
-import java.time.Duration;
 import java.util.Scanner;
 
 import org.apache.commons.lang.NotImplementedException;
@@ -29,10 +28,6 @@ import org.apache.commons.lang.StringUtils;
 import org.apache.tinkerpop.gremlin.structure.util.GraphFactory;
 
 import com.baidu.hugegraph.HugeGraph;
-import com.baidu.hugegraph.backend.cache.Cache;
-import com.baidu.hugegraph.backend.cache.CacheManager;
-import com.baidu.hugegraph.backend.id.Id;
-import com.baidu.hugegraph.backend.id.IdGenerator;
 import com.baidu.hugegraph.config.CoreOptions;
 import com.baidu.hugegraph.config.HugeConfig;
 import com.baidu.hugegraph.config.ServerOptions;
@@ -43,10 +38,8 @@ import com.baidu.hugegraph.util.StringEncoding;
 public class StandardAuthenticator implements HugeAuthenticator {
 
     private static final String INITING_STORE = "initing_store";
-    private static final long CACHE_EXPIRE = Duration.ofMinutes(10L).toMillis();
 
     private HugeGraph graph = null;
-    private Cache<Id, UserRoleCache> usersRoleCache;
 
     private HugeGraph graph() {
         E.checkState(this.graph != null, "Must setup Authenticator first");
@@ -121,14 +114,12 @@ public class StandardAuthenticator implements HugeAuthenticator {
                                       new RpcClientProviderWithAuth(config);
             this.graph.switchAuthManager(clientProvider.authManager());
         }
-
-        this.usersRoleCache = this.cache("users_role");
     }
 
     /**
      * Verify if a user is legal
-     * @param username  the username for authentication
-     * @param password  the password for authentication
+     * @param username the username for authentication
+     * @param password the password for authentication
      * @param token the token for authentication
      * @return String No permission if return ROLE_NONE else return a role
      */
@@ -147,30 +138,6 @@ public class StandardAuthenticator implements HugeAuthenticator {
         }
 
         RolePermission role = userWithRole.role();
-     * @param username the username for authentication
-     * @param password the password for authentication
-     * @return String No permission if return ROLE_NONE else return a role
-     */
-    @Override
-    public RolePermission authenticate(String username, String password) {
-        E.checkArgumentNotNull(username,
-                               "The username parameter can't be null");
-        E.checkArgumentNotNull(password,
-                               "The password parameter can't be null");
-
-        // TODO: Be compatible with JWT(token) way
-        Id usrname = IdGenerator.of(username);
-        UserRoleCache userRole = this.usersRoleCache.getOrFetch(usrname, r -> {
-            RolePermission rolePermission = this.graph().authManager()
-                                                .loginUser(username, password);
-            return new UserRoleCache(rolePermission, password);
-        });
-
-        RolePermission role = null;
-        if (userRole.passwd().equals(password)) {
-            role = userRole.role();
-        }
-
         if (role == null) {
             role = ROLE_NONE;
         } else if (userWithRole.username().equals(USER_ADMIN)) {
@@ -183,33 +150,6 @@ public class StandardAuthenticator implements HugeAuthenticator {
                                 userWithRole.username(), role);
     }
 
-    class UserRoleCache {
-
-        private RolePermission role;
-        private String passwd;
-
-        public UserRoleCache(RolePermission role, String passwd) {
-            this.role = role;
-            this.passwd = passwd;
-        }
-
-        public String passwd() {
-            return passwd;
-        }
-
-        public void setPasswd(String passwd) {
-            this.passwd = passwd;
-        }
-
-        public RolePermission role() {
-            return role;
-        }
-
-        public void setRole(RolePermission role) {
-            this.role = role;
-        }
-    }
-
     @Override
     public AuthManager authManager() {
         return this.graph().authManager();
@@ -218,13 +158,6 @@ public class StandardAuthenticator implements HugeAuthenticator {
     @Override
     public SaslNegotiator newSaslNegotiator(InetAddress remoteAddress) {
         throw new NotImplementedException("SaslNegotiator is unsupported");
-    }
-
-    private <V> Cache<Id, V> cache(String prefix) {
-        String name = prefix + "-" + this.graph.name();
-        Cache<Id, V> cache = CacheManager.instance().cache(name);
-        cache.expire(CACHE_EXPIRE);
-        return cache;
     }
 
     public static void initAdminUserIfNeeded(String confFile) throws Exception {
