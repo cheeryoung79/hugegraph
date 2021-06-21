@@ -137,13 +137,7 @@ public class HugeResource {
     }
 
     private boolean filter(AuthElement element) {
-        ResourceType elementType = element.type();
-        assert this.type.match(elementType);
-        if (elementType == ResourceType.PROJECT) {
-            Id elementId = element.id();
-            assert elementId != null;
-            return this.matchLabel(elementId.asString());
-        }
+        assert this.type.match(element.type());
         if (element instanceof Namifiable) {
             if (!this.filter((Namifiable) element)) {
                 return false;
